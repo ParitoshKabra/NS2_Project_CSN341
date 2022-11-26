@@ -13,7 +13,7 @@ set opt(y)			500	;# Y dimension of the topography
 set opt(ifqlen)	500	;# max packet in ifq
 set opt(nn)			6		;# number of nodes
 set opt(seed)		10
-set opt(stop)		5000.0		;# simulation time
+set opt(stop)		5000		;# simulation time
 set opt(rp)       DSDV        ;# routing protocol
 # ======================================================================
 set simstart 10
@@ -79,7 +79,7 @@ Agent/TCP instproc done {} {
     #the class is determined by the flow-ID and total number of tcp-sources
     set sender [expr int(floor($flind/$nof_tcps))]
     set ind [expr $flind-$sender*$nof_tcps]
-
+    puts "$flind $sender $ind"
     lappend nlist($sender) [list [$ns now] [llength $reslist($sender)]]
 
     for {set nn 0} {$nn < [llength $reslist($sender)]} {incr nn} {
@@ -114,32 +114,29 @@ proc start_flow {sender} {
     set tt [$ns now]
     set freeflows [llength $freelist($sender)]
     set resflows [llength $reslist($sender)]
-
     lappend nlist($sender) [list $tt $resflows]
 
     if {$freeflows == 0} {
         puts "Sender $sender: At $tt, nof of free TCP sources == 0!!!"
-        exit
     }
-    #take the first index from the list of free flows
-    set ind [lindex $freelist($sender) 0]
-    set cur_fsize [expr ceil([$rng exponential $filesize])]
+    if {$freeflows != 0} {
+        #take the first index from the list of free flows
+        set ind [lindex $freelist($sender) 0]
+        set cur_fsize [expr ceil([$rng exponential $filesize])]
 
-    # $tcp_s($sender $ind) reset
-    # $tcp_d($sender, $ind) reset
-    # $ftp($sender, $ind) produce $cur_fsize
-    [lindex $tcp_s($sender) $ind] reset
-    [lindex $tcp_d($sender) $ind] reset
-    [lindex $ftp($sender) $ind] produce $cur_fsize
+        [lindex $tcp_s($sender) $ind] reset
+        [lindex $tcp_d($sender) $ind] reset
+        [lindex $ftp($sender) $ind] produce $cur_fsize
 
-    set freelist($sender) [lreplace $freelist($sender) 0 0]
-    lappend reslist($sender) [list $ind $tt $cur_fsize]
+        set freelist($sender) [lreplace $freelist($sender) 0 0]
+        lappend reslist($sender) [list $ind $tt $cur_fsize]
 
-    set newarrtime [expr $tt+[$rng exponential $mean_intarrtime]]
-    $ns at $newarrtime "start_flow $sender"
+        set newarrtime [expr $tt+[$rng exponential $mean_intarrtime]]
+        $ns at $newarrtime "[start_flow $sender]"
 
-    if {$tt > $simend} {
-        $ns at $tt "$ns halt"
+        if {$tt > $simend} {
+            $ns at $tt "$ns halt"
+        }
     }
 }
 
@@ -185,23 +182,23 @@ $node_(0) set Y_ 100.0
 $node_(0) set Z_ 0.0
 
 $node_(1) set X_ 100.0
-$node_(1) set Y_ 100.0
+$node_(1) set Y_ 80.0
 $node_(1) set Z_ 0.0
 
 $node_(2) set X_ 100.0
-$node_(2) set Y_ 100.0
+$node_(2) set Y_ 60.0
 $node_(2) set Z_ 0.0
 
 $node_(3) set X_ 100.0
-$node_(3) set Y_ 100.0
+$node_(3) set Y_ 40.0
 $node_(3) set Z_ 0.0
 
-$node_(4) set X_ 100.0
-$node_(4) set Y_ 100.0
+$node_(4) set X_ 200.0
+$node_(4) set Y_ 70.0
 $node_(4) set Z_ 0.0
 
-$node_(5) set X_ 0.0
-$node_(5) set Y_ 0.0
+$node_(5) set X_ 300.0
+$node_(5) set Y_ 70.0
 $node_(5) set Z_ 0.0
 
 #Create links between the nodes
@@ -214,9 +211,9 @@ $ns duplex-link $node_(3) $node_(4) 100Mb 100ms DropTail
 $ns duplex-link $node_(4) $node_(5) 10Mb 10ms DropTail
 
 # create a random variable that follows the uniform distribution
-set loss_random_variable [new RandomVariable/Uniform]
-$loss_random_variable set min_ 0 # the range of the random variable;
-$loss_random_variable set max_ 100
+# set loss_random_variable [new RandomVariable/Uniform]
+# $loss_random_variable set min_ 0 # the range of the random variable;
+# $loss_random_variable set max_ 100
 
 # set loss_module [new ErrorModel/Periodic] # create the error model;
 # $loss_module drop-target [new Agent/Null] #a null agent where the dropped packets go to
@@ -246,12 +243,13 @@ for {set ii 0} {$ii < $nn - 2} {incr ii} {
     }
 }
 
-for {set sender 0} {$sender < $nn - 2} {incr sender} {
-    parray ftp
-    $ns at 0.2 "[start_flow $sender]"
-}
+$ns at 10 "[start_flow 0]"
+$ns at 30 "[start_flow 1]"
+$ns at 70 "[start_flow 2]"
+$ns at 100 "[start_flow 3]"
 
 proc finish {} {
+    puts "Pls call hoja"
     global ns namfd tracefd
     $ns flush-trace
     #Close the NAM trace file
@@ -261,9 +259,9 @@ proc finish {} {
     exec nam out.nam &
     exit 0
 }
-#Call the finish procedure after end of simulation time
+# Call the finish procedure after end of simulation time
 $ns at $simend "finish"
-
+$ns run
 ############# Add your code from here ################
 
 # create all TCP flows
