@@ -1,38 +1,18 @@
-# ======================================================================
-# 802.11 Script Options
-# ======================================================================
-set opt(chan)		Channel/WirelessChannel
-set opt(prop)		Propagation/TwoRayGround
-set opt(netif)		Phy/WirelessPhy
-set opt(mac)		Mac/802_11
-set opt(ifq)		Queue/DropTail/PriQueue
-set opt(ll)			LL
-set opt(ant)      Antenna/OmniAntenna
-set opt(x)			500	;# X dimension of the topography
-set opt(y)			500	;# Y dimension of the topography
-set opt(ifqlen)	500	;# max packet in ifq
 set opt(nn)			6		;# number of nodes
 set opt(seed)		10
 set opt(stop)		5000		;# simulation time
-set opt(rp)       DSDV        ;# routing protocol
-# ======================================================================
+set ns		[new Simulator]
+
+# Opening Trace file
+set tracefd     [open simple.tr w]
+$ns trace-all $tracefd
+
+set namfd [open out.nam w]
+$ns namtrace-all $namfd
+
 set simstart 10
 set simend $opt(stop)
 
-set bw 11Mb
-Mac/802_11 set dataRate_ $bw
-Mac/802_11 set RTSThreshold_ 3000
-
-proc create-god { nodes } {
-    global ns_ god_
-    set god_ [new God]
-    $god_ num_nodes $nodes
-}
-
-if { $opt(x) == 0 || $opt(y) == 0 } {
-    puts "Invalid Topology parameters"
-    exit 1
-}
 
 #Random variable
 set rng [new RNG]
@@ -71,7 +51,7 @@ for {set ii 0} {$ii < $nof_senders} {incr ii} {
 # Routine performed for each completed file transfer
 Agent/TCP instproc done {} {
     global ns freelist reslist ftp rng filesize mean_intarrtime nof_tcps \
-        simstart simend delres nlist tmplog nof_senders
+        simstart simend delres nlist nof_senders
 
     #flow-ID of the TCP flow
     set flind [$self set fid_]
@@ -79,7 +59,7 @@ Agent/TCP instproc done {} {
     #the class is determined by the flow-ID and total number of tcp-sources
     set sender [expr int(floor($flind/$nof_tcps))]
     set ind [expr $flind-$sender*$nof_tcps]
-    puts "$flind $sender $ind"
+    # puts "$flind $sender $ind"
     lappend nlist($sender) [list [$ns now] [llength $reslist($sender)]]
 
     for {set nn 0} {$nn < [llength $reslist($sender)]} {incr nn} {
@@ -108,9 +88,8 @@ Agent/TCP instproc done {} {
 ###########################################
 # Routine performed for each new flow arrival
 proc start_flow {sender} {
-    global ns freelist reslist ftp tcp_s tcp_d rng nof_tcps filesize mean_intarrtime simend tmplog nof_senders
+    global ns freelist reslist ftp tcp_s tcp_d rng nof_tcps filesize mean_intarrtime simend nof_senders
     #you have to create the variables tcp_s (tcp source) and tcp_d (tcp destination)
-
     set tt [$ns now]
     set freeflows [llength $freelist($sender)]
     set resflows [llength $reslist($sender)]
@@ -126,7 +105,7 @@ proc start_flow {sender} {
 
         [lindex $tcp_s($sender) $ind] reset
         [lindex $tcp_d($sender) $ind] reset
-        [lindex $ftp($sender) $ind] produce $cur_fsize
+        $ns at $tt "[lindex $ftp($sender) $ind] produce $cur_fsize"
 
         set freelist($sender) [lreplace $freelist($sender) 0 0]
         lappend reslist($sender) [list $ind $tt $cur_fsize]
@@ -140,66 +119,12 @@ proc start_flow {sender} {
     }
 }
 
-#Initializing a simulator instance
-set ns		[new Simulator]
-set chan	[new $opt(chan)]
-set prop	[new $opt(prop)]
-set topo	[new Topography]
-
-$topo load_flatgrid $opt(x) $opt(y)
-$prop topography $topo
-
-# Create God
-create-god $opt(nn)
-
-# Opening Trace file
-set tracefd     [open simple.tr w]
-$ns trace-all $tracefd
-
-set namfd [open out.nam w]
-$ns namtrace-all $namfd
-
-# configure node
-$ns node-config  -adhocRouting $opt(rp) \
-    -llType $opt(ll) \
-    -macType $opt(mac) \
-    -ifqType $opt(ifq) \
-    -ifqLen $opt(ifqlen) \
-    -antType $opt(ant) \
-    -propType $opt(prop) \
-    -phyType $opt(netif) \
-    -channel $chan \
-    -topoInstance $topo
-
 for {set i 0} {$i < $opt(nn) } {incr i} {
     set node_($i) [$ns node]
 }
 
 #Sender/receivers location
 set nn $opt(nn)
-$node_(0) set X_ 100.0
-$node_(0) set Y_ 100.0
-$node_(0) set Z_ 0.0
-
-$node_(1) set X_ 100.0
-$node_(1) set Y_ 80.0
-$node_(1) set Z_ 0.0
-
-$node_(2) set X_ 100.0
-$node_(2) set Y_ 60.0
-$node_(2) set Z_ 0.0
-
-$node_(3) set X_ 100.0
-$node_(3) set Y_ 40.0
-$node_(3) set Z_ 0.0
-
-$node_(4) set X_ 200.0
-$node_(4) set Y_ 70.0
-$node_(4) set Z_ 0.0
-
-$node_(5) set X_ 300.0
-$node_(5) set Y_ 70.0
-$node_(5) set Z_ 0.0
 
 #Create links between the nodes
 $ns duplex-link $node_(0) $node_(4) 100Mb 10ms DropTail
@@ -225,8 +150,8 @@ $ns duplex-link $node_(4) $node_(5) 10Mb 10ms DropTail
 for {set ii 0} {$ii < $nn - 2} {incr ii} {
     for {set jj 0} {$jj < 100} {incr jj} {
         set tcp [new Agent/TCP]
-        $tcp set class_ 2
         $tcp set packetSize_ $pktsize
+        $tcp set class_ 2
         $tcp set window_ $maxwnd
         $ns attach-agent $node_($ii) $tcp
         set sink [new Agent/TCPSink]
@@ -249,7 +174,6 @@ $ns at 70 "[start_flow 2]"
 $ns at 100 "[start_flow 3]"
 
 proc finish {} {
-    puts "Pls call hoja"
     global ns namfd tracefd
     $ns flush-trace
     #Close the NAM trace file
