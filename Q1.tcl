@@ -59,7 +59,7 @@ Agent/TCP instproc done {} {
     #the class is determined by the flow-ID and total number of tcp-sources
     set sender [expr int(floor($flind/$nof_tcps))]
     set ind [expr $flind-$sender*$nof_tcps]
-    # puts "$flind $sender $ind"
+    puts "$flind $sender $ind"
     lappend nlist($sender) [list [$ns now] [llength $reslist($sender)]]
 
     for {set nn 0} {$nn < [llength $reslist($sender)]} {incr nn} {
@@ -76,6 +76,7 @@ Agent/TCP instproc done {} {
 
     set tt [$ns now]
     if {$starttime > $simstart && $tt < $simend} {
+        puts "$sender: [expr $tt-$starttime]"
         lappend delres($sender) [expr $tt-$starttime]
     }
 
@@ -135,20 +136,25 @@ $ns duplex-link $node_(3) $node_(4) 100Mb 100ms DropTail
 # Bottleneck Link between the nodes
 $ns duplex-link $node_(4) $node_(5) 10Mb 10ms DropTail
 
+$ns queue-limit $node_(0) $node_(4) 100000
+$ns queue-limit $node_(1) $node_(4) 100000
+$ns queue-limit $node_(2) $node_(4) 100000
+$ns queue-limit $node_(3) $node_(4) 100000
+$ns queue-limit $node_(4) $node_(5) 100000
+
 # create a random variable that follows the uniform distribution
-# set loss_random_variable [new RandomVariable/Uniform]
-# $loss_random_variable set min_ 0 # the range of the random variable;
-# $loss_random_variable set max_ 100
+set loss_random_variable [new RandomVariable/Uniform]
+$loss_random_variable set min_ 0 # the range of the random variable;
+$loss_random_variable set max_ 100
+set loss_module [new ErrorModel]
+$loss_module drop-target [new Agent/Null]
+$loss_module set rate_ 10
+$loss_module ranvar $loss_random_variable
 
-# set loss_module [new ErrorModel/Periodic] # create the error model;
-# $loss_module drop-target [new Agent/Null] #a null agent where the dropped packets go to
-# $loss_module set rate_ 10 # error rate will then be (0.1 = 10 / (100 - 0));
-# $loss_module ranvar $loss_random_variable # attach the random variable to loss module;
+$ns lossmodel $loss_module $node_(4) $node_(5)
 
-# $ns lossmodel $loss_module $node_(4) $node_(5)
-
-for {set ii 0} {$ii < $nn - 2} {incr ii} {
-    for {set jj 0} {$jj < 100} {incr jj} {
+for {set jj 0} {$jj < 100} {incr jj} {
+    for {set ii 0} {$ii < $nn - 2} {incr ii} {
         set tcp [new Agent/TCP]
         $tcp set packetSize_ $pktsize
         $tcp set class_ 2
@@ -167,11 +173,10 @@ for {set ii 0} {$ii < $nn - 2} {incr ii} {
         lappend freelist($ii) $jj
     }
 }
-
-$ns at 10 "[start_flow 0]"
-$ns at 30 "[start_flow 1]"
-$ns at 70 "[start_flow 2]"
-$ns at 100 "[start_flow 3]"
+$ns at 50 "[start_flow 0]"
+$ns at 50 "[start_flow 1]"
+$ns at 50 "[start_flow 2]"
+$ns at 50 "[start_flow 3]"
 
 proc finish {} {
     global ns namfd tracefd
