@@ -59,7 +59,6 @@ Agent/TCP instproc done {} {
     #the class is determined by the flow-ID and total number of tcp-sources
     set sender [expr int(floor($flind/$nof_tcps))]
     set ind [expr $flind-$sender*$nof_tcps]
-    puts "$flind $sender $ind"
     lappend nlist($sender) [list [$ns now] [llength $reslist($sender)]]
 
     for {set nn 0} {$nn < [llength $reslist($sender)]} {incr nn} {
@@ -76,7 +75,6 @@ Agent/TCP instproc done {} {
 
     set tt [$ns now]
     if {$starttime > $simstart && $tt < $simend} {
-        puts "$sender: [expr $tt-$starttime]"
         lappend delres($sender) [expr $tt-$starttime]
     }
 
@@ -88,16 +86,15 @@ Agent/TCP instproc done {} {
 
 ###########################################
 # Routine performed for each new flow arrival
-proc start_flow {sender} {
+proc start_flow {sender produceTime} {
     global ns freelist reslist ftp tcp_s tcp_d rng nof_tcps filesize mean_intarrtime simend nof_senders
     #you have to create the variables tcp_s (tcp source) and tcp_d (tcp destination)
-    set tt [$ns now]
     set freeflows [llength $freelist($sender)]
     set resflows [llength $reslist($sender)]
-    lappend nlist($sender) [list $tt $resflows]
+    lappend nlist($sender) [list $produceTime $resflows]
 
     if {$freeflows == 0} {
-        puts "Sender $sender: At $tt, nof of free TCP sources == 0!!!"
+        puts "Sender $sender: At $produceTime, nof of free TCP sources == 0!!!"
     }
     if {$freeflows != 0} {
         #take the first index from the list of free flows
@@ -106,16 +103,16 @@ proc start_flow {sender} {
 
         [lindex $tcp_s($sender) $ind] reset
         [lindex $tcp_d($sender) $ind] reset
-        $ns at $tt "[lindex $ftp($sender) $ind] produce $cur_fsize"
+        $ns at $produceTime "[lindex $ftp($sender) $ind] produce $cur_fsize"
 
         set freelist($sender) [lreplace $freelist($sender) 0 0]
-        lappend reslist($sender) [list $ind $tt $cur_fsize]
+        lappend reslist($sender) [list $ind $produceTime $cur_fsize]
 
-        set newarrtime [expr $tt+[$rng exponential $mean_intarrtime]]
-        $ns at $newarrtime "[start_flow $sender]"
+        set newarrtime [expr $produceTime+[$rng exponential $mean_intarrtime]]
+        $ns at $newarrtime "[start_flow $sender $newarrtime]"
 
-        if {$tt > $simend} {
-            $ns at $tt "$ns halt"
+        if {$produceTime > $simend} {
+            $ns at $produceTime "$ns halt"
         }
     }
 }
@@ -173,10 +170,10 @@ for {set jj 0} {$jj < 100} {incr jj} {
         lappend freelist($ii) $jj
     }
 }
-$ns at 50 "[start_flow 0]"
-$ns at 50 "[start_flow 1]"
-$ns at 50 "[start_flow 2]"
-$ns at 50 "[start_flow 3]"
+$ns at 50 "[start_flow 0 50]"
+$ns at 50 "[start_flow 1 50]"
+$ns at 50 "[start_flow 2 50]"
+$ns at 50 "[start_flow 3 50]"
 
 proc finish {} {
     global ns namfd tracefd
