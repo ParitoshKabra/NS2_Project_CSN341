@@ -1,7 +1,14 @@
-set opt(nn)			6		;# number of nodes
-set opt(seed)		10
-set opt(stop)		5000		;# simulation time
-set ns		[new Simulator]
+set opt(nn)         6       ;# number of nodes
+set opt(seed)       10
+set opt(stop)       5000        ;# simulation time
+set opt(x)			500	;# X dimension of the topography
+set opt(y)			500	;# Y dimension of the topography
+set ns      [new Simulator]
+set opt(prop)		Propagation/TwoRayGround
+set topo	[new Topography]
+set prop	[new $opt(prop)]
+$topo load_flatgrid $opt(x) $opt(y)
+$prop topography $topo
 
 # Opening Trace file
 set tracefd     [open simple.tr w]
@@ -44,6 +51,7 @@ for {set ii 0} {$ii < $nof_senders} {incr ii} {
     set reslist($ii) {}
     set tcp_s($ii) {}
     set tcp_d($ii) {}
+    set mean_size($ii) {}
 }
 
 
@@ -77,7 +85,6 @@ Agent/TCP instproc done {} {
     if {$starttime > $simstart && $tt < $simend} {
         lappend delres($sender) [expr $tt-$starttime]
     }
-
     if {$tt > $simend} {
         $ns at $tt "$ns halt"
     }
@@ -86,33 +93,35 @@ Agent/TCP instproc done {} {
 
 ###########################################
 # Routine performed for each new flow arrival
-proc start_flow {sender produceTime} {
-    global ns freelist reslist ftp tcp_s tcp_d rng nof_tcps filesize mean_intarrtime simend nof_senders
+proc start_flow {sender timetostart} {
+    global ns freelist reslist ftp tcp_s tcp_d rng nof_tcps filesize mean_intarrtime simend nof_senders mean_size
     #you have to create the variables tcp_s (tcp source) and tcp_d (tcp destination)
+    set tt [$ns now]
     set freeflows [llength $freelist($sender)]
     set resflows [llength $reslist($sender)]
-    lappend nlist($sender) [list $produceTime $resflows]
+    lappend nlist($sender) [list $tt $resflows]
 
     if {$freeflows == 0} {
-        puts "Sender $sender: At $produceTime, nof of free TCP sources == 0!!!"
+        puts "Sender $sender: At $timetostart, nof of free TCP sources == 0!!!"
     }
     if {$freeflows != 0} {
         #take the first index from the list of free flows
         set ind [lindex $freelist($sender) 0]
         set cur_fsize [expr ceil([$rng exponential $filesize])]
-
+        lappend mean_size($sender) $cur_fsize
         [lindex $tcp_s($sender) $ind] reset
         [lindex $tcp_d($sender) $ind] reset
-        $ns at $produceTime "[lindex $ftp($sender) $ind] produce $cur_fsize"
+        $ns at $timetostart "[lindex $ftp($sender) $ind] produce $cur_fsize"
 
         set freelist($sender) [lreplace $freelist($sender) 0 0]
-        lappend reslist($sender) [list $ind $produceTime $cur_fsize]
+        lappend reslist($sender) [list $ind $timetostart $cur_fsize]
 
-        set newarrtime [expr $produceTime+[$rng exponential $mean_intarrtime]]
+        set newarrtime [expr $timetostart+[$rng exponential $mean_intarrtime]]
+
         $ns at $newarrtime "[start_flow $sender $newarrtime]"
 
-        if {$produceTime > $simend} {
-            $ns at $produceTime "$ns halt"
+        if {$tt > $simend} {
+            $ns at $tt "$ns halt"
         }
     }
 }
@@ -139,13 +148,17 @@ $ns queue-limit $node_(2) $node_(4) 100000
 $ns queue-limit $node_(3) $node_(4) 100000
 $ns queue-limit $node_(4) $node_(5) 100000
 
+set slink [$ns link $node_(4) $node_(5)]
+set fmon [$ns makeflowmon Fid]
+$ns attach-fmon $slink $fmon
+
 # create a random variable that follows the uniform distribution
 set loss_random_variable [new RandomVariable/Uniform]
 $loss_random_variable set min_ 0 # the range of the random variable;
 $loss_random_variable set max_ 100
 set loss_module [new ErrorModel]
 $loss_module drop-target [new Agent/Null]
-$loss_module set rate_ 10
+$loss_module set rate_ 1
 $loss_module ranvar $loss_random_variable
 
 $ns lossmodel $loss_module $node_(4) $node_(5)
@@ -170,13 +183,44 @@ for {set jj 0} {$jj < 100} {incr jj} {
         lappend freelist($ii) $jj
     }
 }
-$ns at 50 "[start_flow 0 50]"
-$ns at 50 "[start_flow 1 50]"
-$ns at 50 "[start_flow 2 50]"
-$ns at 50 "[start_flow 3 50]"
+
+set parr_start 0
+set pdrops_start 0
+proc record_start {} {
+    global fmon ns parr_start pdrops_start nof_classes
+    #you have to create the fmon_bn (flow monitor) in the bottleneck link
+    set parr_start [$fmon set parrivals_]
+    set pdrops_start [$fmon set pdrops_]
+    puts "Bottleneck at [$ns now]: arr=$parr_start, drops=$pdrops_start"
+}
+set parr_end 0
+set pdrops_end 0
+proc record_end { } {
+
+    global fmon ns parr_start pdrops_start nof_classes simend mean_size
+    set parr_start [$fmon set parrivals_]
+    set pdrops_start [$fmon set pdrops_]
+    puts "Bottleneck at [$ns now]: arr=$parr_start, drops=$pdrops_start"
+    for {set ii 0} {$ii < 4} {incr ii} {
+        set sum 0.0
+        for {set jj 0} {$jj < 100} {incr jj} {
+            set sum [expr $sum + [lindex $mean_size($ii) $jj]]
+        }
+        set sum [expr $sum/100];
+        puts "Mean size of file for the class $ii is $sum"
+    }
+
+}
+
+record_start
+$ns at 50 "[start_flow 0 0]"
+$ns at 50 "[start_flow 1 0]"
+$ns at 50 "[start_flow 2 0]"
+$ns at 50 "[start_flow 3 0]"
 
 proc finish {} {
     global ns namfd tracefd
+    record_end
     $ns flush-trace
     #Close the NAM trace file
     close $namfd
@@ -185,20 +229,9 @@ proc finish {} {
     exec nam out.nam &
     exit 0
 }
+
+
 # Call the finish procedure after end of simulation time
 $ns at $simend "finish"
 $ns run
 ############# Add your code from here ################
-
-# create all TCP flows
-# - attach them to access nodes
-# - configure the parameters (flow id, packet size)
-# - flow numbering assumed to be the following
-#   - class 1 id's: 0...nof_tcps-1
-#   - class 2 id's: nof_tcps...(2*nof_tcps)-1, etc.
-# - create an FTP application on top of each TCP
-# - remember to insert each new connection in freelist
-#
-# - Schedule the first flow arrivals for each class
-#
-# and Finally process the collected result
