@@ -45,6 +45,7 @@ for {set ii 0} {$ii < $nof_senders} {incr ii} {
     set reslist($ii) {}
     set tcp_s($ii) {}
     set tcp_d($ii) {}
+
 }
 
 
@@ -61,10 +62,10 @@ Agent/TCP instproc done {} {
 
     if {$sender > 3} {
 
-        set sender [expr $sender-4];
-        set ind [expr $ind +300]
+     set sender [expr $sender-4];
+     set ind [expr $ind +300]
     }
-
+        
 
     lappend nlist($sender) [list [$ns now] [llength $reslist($sender)]]
 
@@ -95,7 +96,7 @@ Agent/TCP instproc done {} {
 
 proc start_flow {sender timetostart} {
 
-    global ns freelist reslist ftp tcp_s tcp_d rng nof_tcps filesize mean_intarrtime simend nof_senders
+    global ns freelist reslist ftp tcp_s tcp_d rng nof_tcps filesize mean_intarrtime simend nof_senders 
     #you have to create the variables tcp_s (tcp source) and tcp_d (tcp destination)
     set tt [$ns now]
     set freeflows [llength $freelist($sender)]
@@ -148,9 +149,9 @@ for {set i 0} {$i <$bootlenecks} {incr i} {
 set nn $opt(nn)
 #Create links between the nodes
 for {set i 0} {$i <$corenodes } {incr i} {
-    $ns duplex-link $corenode_($i) $endnode_([expr $i*3])  10Mb 10ms DropTail
-    $ns duplex-link $corenode_($i) $endnode_([expr 3*$i+1]) 10Mb 10ms DropTail
-    $ns duplex-link $corenode_($i) $endnode_([expr 3*$i+2]) 10Mb 10ms DropTail
+  $ns duplex-link $corenode_($i) $endnode_([expr $i*3])  10Mb 10ms DropTail
+  $ns duplex-link $corenode_($i) $endnode_([expr 3*$i+1]) 10Mb 10ms DropTail
+  $ns duplex-link $corenode_($i) $endnode_([expr 3*$i+2]) 10Mb 10ms DropTail  
 }
 
 $ns duplex-link $corenode_(0) $bottlenck_(0) 100Mb 5ms DropTail
@@ -165,36 +166,32 @@ $ns duplex-link $corenode_(7) $bottlenck_(1) 100Mb 50ms DropTail
 
 $ns duplex-link $bottlenck_(1) $bottlenck_(0) 10Mb 30ms DropTail
 
-set slink [$ns link $bottlenck_(1) $bottlenck_(0)]
-set fmon [$ns makeflowmon Fid]
-$ns attach-fmon $slink $fmon
-
-$ns queue-limit $endnodes_(0) $corenode_(0) 100
-$ns queue-limit $endnodes_(1) $corenode_(0) 100
-$ns queue-limit $endnodes_(2) $corenode_(0) 100
-$ns queue-limit $endnodes_(3) $corenode_(1) 100
-$ns queue-limit $endnodes_(4) $corenode_(1) 100
-$ns queue-limit $endnodes_(5) $corenode_(1) 100
-$ns queue-limit $endnodes_(6) $corenode_(2) 100
-$ns queue-limit $endnodes_(7) $corenode_(2) 100
-$ns queue-limit $endnodes_(8) $corenode_(2) 100
-$ns queue-limit $endnodes_(9) $corenode_(3) 100
-$ns queue-limit $endnodes_(10) $corenode_(3) 100
-$ns queue-limit $endnodes_(11) $corenode_(3) 100
-$ns queue-limit $endnodes_(12) $corenode_(4) 100
-$ns queue-limit $endnodes_(13) $corenode_(4) 100
-$ns queue-limit $endnodes_(14) $corenode_(4) 100
-$ns queue-limit $endnodes_(15) $corenode_(5) 100
-$ns queue-limit $endnodes_(16) $corenode_(5) 100
-$ns queue-limit $endnodes_(17) $corenode_(5) 100
-$ns queue-limit $endnodes_(18) $corenode_(6) 100
-$ns queue-limit $endnodes_(19) $corenode_(6) 100
-$ns queue-limit $endnodes_(20) $corenode_(6) 100
-$ns queue-limit $endnodes_(21) $corenode_(7) 100
-$ns queue-limit $endnodes_(22) $corenode_(7) 100
-$ns queue-limit $endnodes_(23) $corenode_(7) 100
 
 
+$ns queue-limit $endnode_(0) $corenode_(0) 100
+$ns queue-limit $endnode_(1) $corenode_(0) 100
+$ns queue-limit $endnode_(2) $corenode_(0) 100
+$ns queue-limit $endnode_(3) $corenode_(1) 100
+$ns queue-limit $endnode_(4) $corenode_(1) 100
+$ns queue-limit $endnode_(5) $corenode_(1) 100
+$ns queue-limit $endnode_(6) $corenode_(2) 100
+$ns queue-limit $endnode_(7) $corenode_(2) 100
+$ns queue-limit $endnode_(8) $corenode_(2) 100
+$ns queue-limit $endnode_(9) $corenode_(3) 100
+$ns queue-limit $endnode_(10) $corenode_(3) 100
+$ns queue-limit $endnode_(11) $corenode_(3) 100
+$ns queue-limit $endnode_(12) $corenode_(4) 100
+$ns queue-limit $endnode_(13) $corenode_(4) 100
+$ns queue-limit $endnode_(14) $corenode_(4) 100
+$ns queue-limit $endnode_(15) $corenode_(5) 100
+$ns queue-limit $endnode_(16) $corenode_(5) 100
+$ns queue-limit $endnode_(17) $corenode_(5) 100
+$ns queue-limit $endnode_(18) $corenode_(6) 100
+$ns queue-limit $endnode_(19) $corenode_(6) 100
+$ns queue-limit $endnode_(20) $corenode_(6) 100
+$ns queue-limit $endnode_(21) $corenode_(7) 100
+$ns queue-limit $endnode_(22) $corenode_(7) 100
+$ns queue-limit $endnode_(23) $corenode_(7) 100
 $ns queue-limit $bottlenck_(1) $bottlenck_(0) 100
 
 
@@ -202,24 +199,24 @@ $ns queue-limit $bottlenck_(1) $bottlenck_(0) 100
 for {set ii 0} {$ii < 4} {incr ii} {
     for {set kk 0} {$kk < 3} {incr kk} {
         for {set jj 0} {$jj < 100} {incr jj} {
-            set tcp [new Agent/TCP]
-            $tcp set packetSize_ $pktsize
-            $tcp set class_ 2
-            $tcp set window_ $maxwnd
-            $ns attach-agent $endnode_([expr $ii*3+$kk]) $tcp
-            set sink [new Agent/TCPSink]
-            $ns attach-agent $bottlenck_(1) $sink
-            $ns connect $tcp $sink
-            $tcp set fid_ [expr 300*($ii)+100*($kk) +  $jj]
+        set tcp [new Agent/TCP]
+        $tcp set packetSize_ $pktsize
+        $tcp set class_ 2
+        $tcp set window_ $maxwnd
+        $ns attach-agent $endnode_([expr $ii*3+$kk]) $tcp
+        set sink [new Agent/TCPSink]
+        $ns attach-agent $bottlenck_(1) $sink
+        $ns connect $tcp $sink
+        $tcp set fid_ [expr 300*($ii)+100*($kk) +  $jj]
 
-            lappend tcp_s($ii) $tcp
-            lappend tcp_d($ii) $sink
-            set ftp_local [new Application/FTP]
-            $ftp_local attach-agent $tcp
-            $ftp_local set type_ FTP
-            lappend ftp($ii) $ftp_local
-            lappend freelist($ii) [expr 100*$kk +  $jj]
-        }
+        lappend tcp_s($ii) $tcp
+        lappend tcp_d($ii) $sink
+        set ftp_local [new Application/FTP]
+        $ftp_local attach-agent $tcp
+        $ftp_local set type_ FTP
+        lappend ftp($ii) $ftp_local
+        lappend freelist($ii) [expr 100*$kk +  $jj]
+      }
     }
 }
 
@@ -227,24 +224,24 @@ for {set ii 0} {$ii < 4} {incr ii} {
 for {set ii 4} {$ii < 8} {incr ii} {
     for {set kk 0} {$kk < 3} {incr kk} {
         for {set jj 0} {$jj < 100} {incr jj} {
-            set tcp [new Agent/TCP]
-            $tcp set packetSize_ $pktsize
-            $tcp set class_ 2
-            $tcp set window_ $maxwnd
-            $ns attach-agent $endnode_([expr $ii*3+$kk]) $tcp
-            set sink [new Agent/TCPSink]
-            $ns attach-agent $bottlenck_(0) $sink
-            $ns connect $tcp $sink
-            $tcp set fid_ [expr 300*$ii+100*$kk +  $jj]
+        set tcp [new Agent/TCP]
+        $tcp set packetSize_ $pktsize
+        $tcp set class_ 2
+        $tcp set window_ $maxwnd
+        $ns attach-agent $endnode_([expr $ii*3+$kk]) $tcp
+        set sink [new Agent/TCPSink]
+        $ns attach-agent $bottlenck_(0) $sink
+        $ns connect $tcp $sink
+        $tcp set fid_ [expr 300*$ii+100*$kk +  $jj]
 
-            lappend tcp_s([expr $ii-4]) $tcp
-            lappend tcp_d([expr $ii-4]) $sink
-            set ftp_local [new Application/FTP]
-            $ftp_local attach-agent $tcp
-            $ftp_local set type_ FTP
-            lappend ftp([expr $ii-4]) $ftp_local
-            lappend freelist([expr $ii-4]) [expr 300+100*$kk +  $jj]
-        }
+        lappend tcp_s([expr $ii-4]) $tcp
+        lappend tcp_d([expr $ii-4]) $sink
+        set ftp_local [new Application/FTP]
+        $ftp_local attach-agent $tcp
+        $ftp_local set type_ FTP
+        lappend ftp([expr $ii-4]) $ftp_local
+        lappend freelist([expr $ii-4]) [expr 300+100*$kk +  $jj]
+      }
     }
 }
 
@@ -253,27 +250,13 @@ $ns at 50 "[start_flow 1 0]"
 $ns at 50 "[start_flow 2 0]"
 $ns at 50 "[start_flow 3 0]"
 
-set parr_start 0
-set pdrops_start 0
 
 proc finish {} {
-    global ns namfd tracefd parr_start pdrops_start fmon mean_size
+    global ns namfd tracefd parr_start pdrops_start fmon  delres
     $ns flush-trace
-    set parr_start [$fmon set parrivals_]
-    set pdrops_start [$fmon set pdrops_]
-    puts "Bottleneck at [$ns now]: arr=$parr_start, drops=$pdrops_start"
     #Close the NAM trace file
     close $namfd
     close $tracefd
-
-    for {set ii 0} {$ii < 4} {incr ii} {
-        set sum 0.0
-        for {set jj 0} {$jj < 100} {incr jj} {
-            set sum [expr $sum + [lindex $mean_size($ii) $jj]]
-        }
-        set sum [expr $sum/100];
-        puts "Mean size of file for the class $ii is $sum"
-    }
     #Execute NAM on the trace file
     exec nam out.nam &
     exit 0
