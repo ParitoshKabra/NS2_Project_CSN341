@@ -1,7 +1,8 @@
-set opt(nn)			34		;# number of nodes
-set opt(seed)		10
-set opt(stop)		5000		;# simulation time
-set ns		[new Simulator]
+set opt(nn)         6   ;# number of nodes
+set opt(seed)       10
+set opt(stop)       5000        ;# simulation time
+set ns      [new Simulator]
+set count 1;
 
 # Opening Trace file
 set tracefd     [open simple.tr w]
@@ -23,8 +24,8 @@ set pktsize 1460 ; # Pkt size in bytes (1500 - IP header - TCP header)
 set filesize 500 ; #As count of packets
 
 # maximum number of tcps per class
-set nof_tcps 100/3
-set nof_senders 12
+set nof_tcps 100
+set nof_senders 4
 
 # the total (theoretical) load
 set rho 0.8
@@ -33,7 +34,7 @@ set rho_cl [expr ($rho/$nof_senders)]
 set mean_intarrtime [expr ($pktsize+40)*8.0*$filesize/(11000000*$rho_cl)]
 puts "1/la = $mean_intarrtime"
 
-for {set ii 0} {$ii < $opt(nn)} {incr ii} {
+for {set ii 0} {$ii < $nof_senders} {incr ii} {
     #contains the delay results for each class
     set delres($ii) {}
     #contains the number of active flows as a function of time
@@ -53,12 +54,18 @@ Agent/TCP instproc done {} {
     global ns freelist reslist ftp rng filesize mean_intarrtime nof_tcps \
         simstart simend delres nlist nof_senders
 
-    #flow-ID of the TCP flow
     set flind [$self set fid_]
 
-    #the class is determined by the flow-ID and total number of tcp-sources
-    set sender [expr int(floor($flind/$nof_tcps))]
-    set ind [expr $flind-$sender*$nof_tcps]
+    set sender [expr int(floor($flind/($nof_tcps*3)))]
+    set ind [expr $flind-$sender*$nof_tcps*3]
+
+    if {$sender > 3} {
+
+        set sender [expr $sender-4];
+        set ind [expr $ind +300]
+    }
+
+
     lappend nlist($sender) [list [$ns now] [llength $reslist($sender)]]
 
     for {set nn 0} {$nn < [llength $reslist($sender)]} {incr nn} {
@@ -77,7 +84,6 @@ Agent/TCP instproc done {} {
     if {$starttime > $simstart && $tt < $simend} {
         lappend delres($sender) [expr $tt-$starttime]
     }
-
     if {$tt > $simend} {
         $ns at $tt "$ns halt"
     }
@@ -86,123 +92,192 @@ Agent/TCP instproc done {} {
 
 ###########################################
 # Routine performed for each new flow arrival
-proc start_flow {sender produceTime} {
+
+proc start_flow {sender timetostart} {
+
     global ns freelist reslist ftp tcp_s tcp_d rng nof_tcps filesize mean_intarrtime simend nof_senders
     #you have to create the variables tcp_s (tcp source) and tcp_d (tcp destination)
+    set tt [$ns now]
     set freeflows [llength $freelist($sender)]
     set resflows [llength $reslist($sender)]
-    lappend nlist($sender) [list $produceTime $resflows]
+    lappend nlist($sender) [list $tt $resflows]
 
     if {$freeflows == 0} {
-        puts "Sender $sender: At $produceTime, nof of free TCP sources == 0!!!"
+        puts "Sender $sender: At $timetostart, nof of free TCP sources == 0!!!"
     }
     if {$freeflows != 0} {
         #take the first index from the list of free flows
         set ind [lindex $freelist($sender) 0]
         set cur_fsize [expr ceil([$rng exponential $filesize])]
-
         [lindex $tcp_s($sender) $ind] reset
         [lindex $tcp_d($sender) $ind] reset
-        $ns at $produceTime "[lindex $ftp($sender) $ind] produce $cur_fsize"
+        $ns at $timetostart "[lindex $ftp($sender) $ind] produce $cur_fsize"
 
         set freelist($sender) [lreplace $freelist($sender) 0 0]
-        lappend reslist($sender) [list $ind $produceTime $cur_fsize]
+        lappend reslist($sender) [list $ind $timetostart $cur_fsize]
 
-        set newarrtime [expr $produceTime+[$rng exponential $mean_intarrtime]]
+        set newarrtime [expr $timetostart+[$rng exponential $mean_intarrtime]]
+
         $ns at $newarrtime "[start_flow $sender $newarrtime]"
 
-        if {$produceTime > $simend} {
-            $ns at $produceTime "$ns halt"
+        if {$tt > $simend} {
+            $ns at $tt "$ns halt"
         }
     }
 }
 
-for {set i 0} {$i < $opt(nn) } {incr i} {
-    set node_($i) [$ns node]
+set endnodes 24
+for {set i 0} {$i <$endnodes } {incr i} {
+    set endnode_($i) [$ns node]
 }
+
+set corenodes 8
+
+for {set i 0} {$i <$corenodes } {incr i} {
+    set corenode_($i) [$ns node]
+}
+
+set bootlenecks 2
+
+for {set i 0} {$i <$bootlenecks} {incr i} {
+    set bottlenck_($i) [$ns node]
+}
+
 
 #Sender/receivers location
 set nn $opt(nn)
-
 #Create links between the nodes
-for {set access 3} {$access < $nn} {incr access 4} {
-    set i1 [expr $access - 1]
-    set i2 [expr $access - 2]
-    set i3 [expr $access - 3]
-    $ns duplex-link $node_($i1) $node_($access) 10Mb 10ms DropTail
-    $ns queue-limit $node_($i1) $node_($access) 100
-
-    $ns duplex-link $node_($i2) $node_($access) 10Mb 10ms DropTail
-    $ns queue-limit $node_($i1) $node_($access) 100
-
-
-    $ns duplex-link $node_($i3) $node_($access) 10Mb 10ms DropTail
-    $ns queue-limit $node_($i1) $node_($access) 100
-
-    if {$access < 16} {
-        $ns duplex-link $node_($access) $node_([expr $nn - 2]) 100Mb "[expr [expr [expr $access/3]%3]*5]ms" DropTail
-        $ns queue-limit $node_($access) $node_([expr $nn - 2]) 100
-    }
-    if {$access > 16} {
-        $ns duplex-link $node_($access) $node_([expr $nn - 1]) 100Mb "[expr [expr [expr $access/3]%3]*5]ms" DropTail
-        $ns queue-limit $node_($access) $node_([expr $nn - 1]) 100
-    }
+for {set i 0} {$i <$corenodes } {incr i} {
+    $ns duplex-link $corenode_($i) $endnode_([expr $i*3])  10Mb 10ms DropTail
+    $ns duplex-link $corenode_($i) $endnode_([expr 3*$i+1]) 10Mb 10ms DropTail
+    $ns duplex-link $corenode_($i) $endnode_([expr 3*$i+2]) 10Mb 10ms DropTail
 }
-# Bottleneck Link between the nodes
-$ns duplex-link $node_([expr $nn - 2]) $node_([expr $nn - 1]) 10Mb 30ms DropTail
 
-for {set jj 0} {$jj < 100/3} {incr jj} {
-    for {set ii 3} {$ii < $nn/2} {incr ii 4} {
-        set tcpClass [expr $ii/3]
-        for {set dec 3} {$dec >= 0} {incr dec -1} {
-            set tcp [new Agent/TCP/Reno]
+$ns duplex-link $corenode_(0) $bottlenck_(0) 100Mb 5ms DropTail
+$ns duplex-link $corenode_(1) $bottlenck_(0) 100Mb 20ms DropTail
+$ns duplex-link $corenode_(2) $bottlenck_(0) 100Mb 35ms DropTail
+$ns duplex-link $corenode_(3) $bottlenck_(0) 100Mb 50ms DropTail
+$ns duplex-link $corenode_(4) $bottlenck_(1) 100Mb 5ms DropTail
+$ns duplex-link $corenode_(5) $bottlenck_(1) 100Mb 20ms DropTail
+$ns duplex-link $corenode_(6) $bottlenck_(1) 100Mb 35ms DropTail
+$ns duplex-link $corenode_(7) $bottlenck_(1) 100Mb 50ms DropTail
+
+
+$ns duplex-link $bottlenck_(1) $bottlenck_(0) 10Mb 30ms DropTail
+
+set slink [$ns link $bottlenck_(1) $bottlenck_(0)]
+set fmon [$ns makeflowmon Fid]
+$ns attach-fmon $slink $fmon
+
+$ns queue-limit $endnodes_(0) $corenode_(0) 100
+$ns queue-limit $endnodes_(1) $corenode_(0) 100
+$ns queue-limit $endnodes_(2) $corenode_(0) 100
+$ns queue-limit $endnodes_(3) $corenode_(1) 100
+$ns queue-limit $endnodes_(4) $corenode_(1) 100
+$ns queue-limit $endnodes_(5) $corenode_(1) 100
+$ns queue-limit $endnodes_(6) $corenode_(2) 100
+$ns queue-limit $endnodes_(7) $corenode_(2) 100
+$ns queue-limit $endnodes_(8) $corenode_(2) 100
+$ns queue-limit $endnodes_(9) $corenode_(3) 100
+$ns queue-limit $endnodes_(10) $corenode_(3) 100
+$ns queue-limit $endnodes_(11) $corenode_(3) 100
+$ns queue-limit $endnodes_(12) $corenode_(4) 100
+$ns queue-limit $endnodes_(13) $corenode_(4) 100
+$ns queue-limit $endnodes_(14) $corenode_(4) 100
+$ns queue-limit $endnodes_(15) $corenode_(5) 100
+$ns queue-limit $endnodes_(16) $corenode_(5) 100
+$ns queue-limit $endnodes_(17) $corenode_(5) 100
+$ns queue-limit $endnodes_(18) $corenode_(6) 100
+$ns queue-limit $endnodes_(19) $corenode_(6) 100
+$ns queue-limit $endnodes_(20) $corenode_(6) 100
+$ns queue-limit $endnodes_(21) $corenode_(7) 100
+$ns queue-limit $endnodes_(22) $corenode_(7) 100
+$ns queue-limit $endnodes_(23) $corenode_(7) 100
+
+
+$ns queue-limit $bottlenck_(1) $bottlenck_(0) 100
+
+
+
+for {set ii 0} {$ii < 4} {incr ii} {
+    for {set kk 0} {$kk < 3} {incr kk} {
+        for {set jj 0} {$jj < 100} {incr jj} {
+            set tcp [new Agent/TCP]
             $tcp set packetSize_ $pktsize
-            $tcp set class_ $tcpClass
+            $tcp set class_ 2
             $tcp set window_ $maxwnd
-            $ns attach-agent $node_([expr $ii - $dec]) $tcp
+            $ns attach-agent $endnode_([expr $ii*3+$kk]) $tcp
             set sink [new Agent/TCPSink]
-            $ns attach-agent $node_([expr $ii - $dec + 16]) $sink
+            $ns attach-agent $bottlenck_(1) $sink
             $ns connect $tcp $sink
-            $tcp set fid_ [expr 100*[expr $ii - $dec] + $jj]
-            lappend tcp_s([expr $ii - $dec]) $tcp
-            lappend tcp_d([expr $ii - $dec + 16]) $sink
+            $tcp set fid_ [expr 300*($ii)+100*($kk) +  $jj]
+
+            lappend tcp_s($ii) $tcp
+            lappend tcp_d($ii) $sink
             set ftp_local [new Application/FTP]
             $ftp_local attach-agent $tcp
             $ftp_local set type_ FTP
-            lappend ftp([expr $ii - $dec]) $ftp_local
-            lappend freelist([expr $ii - $dec]) $jj
+            lappend ftp($ii) $ftp_local
+            lappend freelist($ii) [expr 100*$kk +  $jj]
         }
     }
 }
-# $ns at 50 "[start_flow 0 50]"
-# $ns at 50 "[start_flow 1 50]"
-# $ns at 50 "[start_flow 2 50]"
-# $ns at 50 "[start_flow 3 50]"
+
+
+for {set ii 4} {$ii < 8} {incr ii} {
+    for {set kk 0} {$kk < 3} {incr kk} {
+        for {set jj 0} {$jj < 100} {incr jj} {
+            set tcp [new Agent/TCP]
+            $tcp set packetSize_ $pktsize
+            $tcp set class_ 2
+            $tcp set window_ $maxwnd
+            $ns attach-agent $endnode_([expr $ii*3+$kk]) $tcp
+            set sink [new Agent/TCPSink]
+            $ns attach-agent $bottlenck_(0) $sink
+            $ns connect $tcp $sink
+            $tcp set fid_ [expr 300*$ii+100*$kk +  $jj]
+
+            lappend tcp_s([expr $ii-4]) $tcp
+            lappend tcp_d([expr $ii-4]) $sink
+            set ftp_local [new Application/FTP]
+            $ftp_local attach-agent $tcp
+            $ftp_local set type_ FTP
+            lappend ftp([expr $ii-4]) $ftp_local
+            lappend freelist([expr $ii-4]) [expr 300+100*$kk +  $jj]
+        }
+    }
+}
+
+$ns at 50 "[start_flow 0 0]"
+$ns at 50 "[start_flow 1 0]"
+$ns at 50 "[start_flow 2 0]"
+$ns at 50 "[start_flow 3 0]"
+
+set parr_start 0
+set pdrops_start 0
 
 proc finish {} {
-    global ns namfd tracefd
+    global ns namfd tracefd parr_start pdrops_start fmon mean_size
     $ns flush-trace
+    set parr_start [$fmon set parrivals_]
+    set pdrops_start [$fmon set pdrops_]
+    puts "Bottleneck at [$ns now]: arr=$parr_start, drops=$pdrops_start"
     #Close the NAM trace file
     close $namfd
     close $tracefd
+
+    for {set ii 0} {$ii < 4} {incr ii} {
+        set sum 0.0
+        for {set jj 0} {$jj < 100} {incr jj} {
+            set sum [expr $sum + [lindex $mean_size($ii) $jj]]
+        }
+        set sum [expr $sum/100];
+        puts "Mean size of file for the class $ii is $sum"
+    }
     #Execute NAM on the trace file
     exec nam out.nam &
     exit 0
 }
-# # Call the finish procedure after end of simulation time
+# Call the finish procedure after end of simulation time
 $ns at $simend "finish"
 $ns run
-############# Add your code from here ################
-
-# create all TCP flows
-# - attach them to access nodes
-# - configure the parameters (flow id, packet size)
-# - flow numbering assumed to be the following
-#   - class 1 id's: 0...nof_tcps-1
-#   - class 2 id's: nof_tcps...(2*nof_tcps)-1, etc.
-# - create an FTP application on top of each TCP
-# - remember to insert each new connection in freelist
-#
-# - Schedule the first flow arrivals for each class
-#
-# and Finally process the collected result
