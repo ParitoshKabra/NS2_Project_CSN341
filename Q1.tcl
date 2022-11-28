@@ -158,7 +158,7 @@ $loss_random_variable set min_ 0 # the range of the random variable;
 $loss_random_variable set max_ 100
 set loss_module [new ErrorModel]
 $loss_module drop-target [new Agent/Null]
-$loss_module set rate_ 1
+$loss_module set rate_ 10
 $loss_module ranvar $loss_random_variable
 
 $ns lossmodel $loss_module $node_(4) $node_(5)
@@ -197,7 +197,7 @@ set parr_end 0
 set pdrops_end 0
 proc record_end { } {
 
-    global fmon ns parr_start pdrops_start nof_classes simend mean_size
+    global fmon ns parr_start pdrops_start nof_classes simend mean_size delres pktsize
     set parr_start [$fmon set parrivals_]
     set pdrops_start [$fmon set pdrops_]
     puts "Bottleneck at [$ns now]: arr=$parr_start, drops=$pdrops_start"
@@ -206,8 +206,15 @@ proc record_end { } {
         for {set jj 0} {$jj < 100} {incr jj} {
             set sum [expr $sum + [lindex $mean_size($ii) $jj]]
         }
+        set meandel 0.0
+        for {set jj 0} {$jj < [llength delres($ii)]} {incr jj} {
+            set meandel [expr $meandel + [lindex $delres($ii) $jj]]
+        }
         set sum [expr $sum/100];
+        set meandel [expr $meandel/[expr [llength delres($ii)]]]
         puts "Mean size of file for the class $ii is $sum"
+        puts "Mean delay of flow for the class $ii is $meandel"
+        puts "Mean Bandwidth for class $ii is [expr [expr ($sum/$meandel)*($pktsize + 40)*8]/1000000]"
     }
 
 }
@@ -219,7 +226,8 @@ $ns at 50 "[start_flow 2 0]"
 $ns at 50 "[start_flow 3 0]"
 
 proc finish {} {
-    global ns namfd tracefd
+    global ns namfd tracefd delres
+    parray delres
     record_end
     $ns flush-trace
     #Close the NAM trace file
